@@ -31,10 +31,10 @@ class GithubUpdater:
         self.on_update_available_callback = update_available_callback
         self.new_version_available = False
         self.logging = logging
-        self.bucket_remaining = 0  # How many requests are left in the bucket
+        self.bucket_remaining = 1  # How many requests are left in the bucket
         self.bucket_reset = 0  # Unix timestamp for when the ratelimit bucket will be reset
         self.bucket_used = 0  # How many requests have been used in the bucket
-        self.bucket_max = 0  # The maximum number of requests in the bucket
+        self.bucket_max = 10  # The maximum number of requests in the bucket
         cleanup()
 
     async def _get_latest_release(self):
