@@ -105,11 +105,11 @@ class RainMeterInterface:
     def load_settings(self):
         """Loads the settings from the settings.json file"""
         # Combine all filters into one lambda expression
-        if self.settings['filter'] == "":
+        if len(self.settings['filter']) == 0:
             self.torrent_filter = lambda d: True
-        elif self.settings['filter'] == 'filter_all':
+        elif 'filter_all' in self.settings['filter']:
             self.torrent_filter = lambda d: True
-        elif self.settings['filter'] == 'filter_active':
+        elif 'filter_active' in self.settings['filter']:
             self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
         self.torrent_sort = self.settings['sort_by']
         self.torrent_reverse = self.settings['reverse']
