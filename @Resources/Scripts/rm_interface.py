@@ -120,7 +120,7 @@ class RainMeterInterface:
 
     def set_settings(self, **kwargs):
         if 'filter' in kwargs:
-            self.settings['filter'] = kwargs['filter']
+            self.settings['filter_by'] = kwargs['filter_by']
         if 'sort_by' in kwargs:
             self.settings['sort_by'] = kwargs['sort_by']
         if 'reverse' in kwargs:
