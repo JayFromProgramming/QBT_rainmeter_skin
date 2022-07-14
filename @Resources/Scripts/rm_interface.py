@@ -65,7 +65,7 @@ class RainMeterInterface:
                     new_settings = {
                         "filter": [],
                         "sort_by": "added_on",
-                        "reverse": False
+                        "reverse": True
                     }
                     json.dump(new_settings, settings_file)
             with open(os.path.join(current_script_dir, "settings.json"), "r") as settings_file:
@@ -125,6 +125,8 @@ class RainMeterInterface:
             self.settings['sort_by'] = kwargs['sort_by']
         if 'reverse' in kwargs:
             self.settings['reverse'] = kwargs['reverse']
+        with open(os.path.join(pathlib.Path(__file__).parent.resolve(), "settings.json"), "w") as settings_file:
+            json.dump(self.settings, settings_file, indent=4)
 
     async def on_update_installed(self):
         """Called when the update is installed"""
