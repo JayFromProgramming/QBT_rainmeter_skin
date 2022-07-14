@@ -217,7 +217,7 @@ class RainMeterInterface:
                 python_home = self.rainmeter.RmReadString("PythonHome", r"C:\Program Files\Python36", False)
                 self.logging.info(f"Python home: {python_home}, preforming update")
                 refresh = await self.auto_updater.preform_update(python_home)
-                self.logging.info("Update complete")
+                self.logging.info("Update complete")  # Literally the only way to know if the update was successful
                 if not refresh:
                     self.rainmeter.RmExecute("[!RefreshApp]")
         except Exception as e:
