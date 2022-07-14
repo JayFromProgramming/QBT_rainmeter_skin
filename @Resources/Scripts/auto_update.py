@@ -63,7 +63,7 @@ class GithubUpdater:
                     continue
 
                 if "tag_name" not in latest_release:
-                    self.logging.error("No latest release tag found")
+                    self.logging.error(f"No latest release tag found{latest_release}")
                     await asyncio.sleep(5)
                     continue
 
