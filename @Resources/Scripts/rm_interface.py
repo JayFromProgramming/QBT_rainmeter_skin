@@ -5,6 +5,7 @@ import traceback
 import json
 import os
 import pathlib
+from os.path import exists
 
 import humanize
 import qbittorrent.client
@@ -52,8 +53,25 @@ class RainMeterInterface:
             self.torrent_reverse = True
             self.logging.debug("Loading secrets.json")
             current_script_dir = pathlib.Path(__file__).parent.resolve()
+
+            if not exists(os.path.join(current_script_dir, "secrets.json")):
+                with open(os.path.join(current_script_dir, "secrets.json"), "w") as f:
+                    json.dump({}, f)
             with open(os.path.join(current_script_dir, "secrets.json"), "r") as secrets_file:
                 secrets = json.load(secrets_file)
+
+            if not exists(os.path.join(current_script_dir, "settings.json")):
+                with open(os.path.join(current_script_dir, "settings.json"), "w") as settings_file:
+                    new_settings = {
+                        "filter": [],
+                        "sort_by": "added_on",
+                        "reverse": False
+                    }
+                    json.dump(new_settings, settings_file)
+            with open(os.path.join(current_script_dir, "settings.json"), "r") as settings_file:
+                self.settings = json.load(settings_file)
+
+            self.load_settings()
 
             self.logging.debug("secrets.json loaded")
             self.qb_user = secrets['Username']
@@ -83,6 +101,26 @@ class RainMeterInterface:
             self.logging.debug("Background tasks launched")
         except Exception as e:
             self.logging.critical(f"Unable to initialize RainMeterInterface: {e}\n{traceback.format_exc()}")
+
+    def load_settings(self):
+        """Loads the settings from the settings.json file"""
+        # Combine all filters into one lambda expression
+        if self.settings['filter'] == "":
+            self.torrent_filter = lambda d: True
+        elif self.settings['filter'] == 'filter_all':
+            self.torrent_filter = lambda d: True
+        elif self.settings['filter'] == 'filter_active':
+            self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
+        self.torrent_sort = self.settings['sort_by']
+        self.torrent_reverse = self.settings['reverse']
+
+    def set_settings(self, **kwargs):
+        if 'filter' in kwargs:
+            self.settings['filter'] = kwargs['filter']
+        if 'sort_by' in kwargs:
+            self.settings['sort_by'] = kwargs['sort_by']
+        if 'reverse' in kwargs:
+            self.settings['reverse'] = kwargs['reverse']
 
     async def on_update_installed(self):
         """Called when the update is installed"""
@@ -220,7 +258,6 @@ class RainMeterInterface:
                 self.rainmeter.RmExecute("[!DeactivateConfig \"QBT_rainmeter_skin\\update-popup\"]")
                 self.running = False
                 self.inhibitor_plug_task.cancel()
-                await asyncio.sleep(2)
                 self.rainmeter.RmExecute("[!SetOption ConnectionMeter Text \"Performing update...\"]")
                 self.rainmeter.RmExecute("[!Redraw]")
                 python_home = self.rainmeter.RmReadString("PythonHome", r"C:\Program Files\Python36", False)
@@ -235,29 +272,35 @@ class RainMeterInterface:
             if bang == 'sort_name':
                 self.torrent_sort = lambda d: d['name']
                 self.torrent_reverse = False
+                self.set_settings(sort_by='name', reverse=False)
             if bang == 'sort_added_date':
                 self.torrent_sort = lambda d: d['added_on']
                 self.torrent_reverse = True
+                self.set_settings(sort_by='added_on', reverse=True)
             if bang == 'sort_dl_speed':
                 self.torrent_sort = lambda d: d['dlspeed']
                 self.torrent_reverse = True
+                self.set_settings(sort_by='dlspeed', reverse=True)
             if bang == 'sort_ul_speed':
                 self.torrent_sort = lambda d: d['upspeed']
                 self.torrent_reverse = True
+                self.set_settings(sort_by='upspeed', reverse=True)
             self.page_start = 0
         if 'filter_' in bang:
             if bang == 'filter_all':
                 self.torrent_filter = lambda d: True
+                self.set_settings(filter_by='filter_all')
             if bang == 'filter_active':
                 self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
+                self.set_settings(filter_by='filter_active')
             self.page_start = 0
 
         if 'inhibit_' in bang:
             if bang == 'inhibit_true':
-                await self.inhibitor_plugin.execute(inhibit=True, override=True)
+                await self.inhibitor_plugin.execute(inhibit=False, override=True)
                 self.logging.debug("Inhibitor set to true")
             if bang == 'inhibit_false':
-                await self.inhibitor_plugin.execute(inhibit=False, override=True)
+                await self.inhibitor_plugin.execute(inhibit=True, override=False)
                 self.logging.debug("Inhibitor set to false")
 
     async def tear_down(self):

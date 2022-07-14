@@ -38,6 +38,12 @@ class GithubUpdater:
             async with session.get(f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/latest") as resp:
                 return await resp.json()
 
+    # async def _get_release_details(self, tag_name: str):
+    #     async with aiohttp.ClientSession() as session:
+    #         async with session.get(f"https://api.github.com/repos/{self.owner}/{self.repo}/git/ref/tags/{tag_name}")\
+    #                 as resp:
+    #             return await resp.json()
+
     def _get_installed_version(self):
         try:
             current_script_dir = pathlib.Path(__file__).parent.resolve()
@@ -69,6 +75,17 @@ class GithubUpdater:
 
                 if latest_release["tag_name"] != self._get_installed_version():
                     logging.info(f"New version available: {latest_release['tag_name']}")
+                    # Get the commit hash associated with the release
+                    # if "target_commitish" not in latest_release:
+                    #     self.logging.error(f"No target commitish found in release: {latest_release}")
+                    #     await asyncio.sleep(5)
+                    #     continue
+                    # details = await self._get_release_details(latest_release["tag_name"])
+                    # if details is None:
+                    #     self.logging.error(f"Failed to get release details for {latest_release['tag_name']}")
+                    #     await asyncio.sleep(5)
+                    #     continue
+
                     self.new_version_available = True
                     if self.on_update_available_callback is not None:
                         current_version = self._get_installed_version()
@@ -79,7 +96,7 @@ class GithubUpdater:
             except Exception as e:
                 self.logging.error(f"Failed to check for updates: {e}\n{traceback.format_exc()}")
             finally:
-                await asyncio.sleep(60)
+                await asyncio.sleep(90)
 
     async def make_recovery_shell_script(self):
         """Creates a shell script that can be used to restore the old version"""
