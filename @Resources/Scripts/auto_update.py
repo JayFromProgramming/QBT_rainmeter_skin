@@ -1,7 +1,7 @@
 import asyncio
-import json
 import os
 import pathlib
+import time
 import traceback
 import logging
 import aiohttp
@@ -31,11 +31,22 @@ class GithubUpdater:
         self.on_update_available_callback = update_available_callback
         self.new_version_available = False
         self.logging = logging
+        self.ratelimit_remaining = ""
+        self.ratelimit_reset = 0
+        self.ratelimit_used = 0
         cleanup()
 
     async def _get_latest_release(self):
+
+        if self.ratelimit_remaining == 0:
+            raise Exception("Ratelimit reached")
+
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/latest") as resp:
+                # Get the ratelimit
+                self.ratelimit_remaining = int(resp.headers.get("X-Ratelimit-Remaining"))
+                self.ratelimit_reset = int(resp.headers.get("X-Ratelimit-Reset"))
+                self.ratelimit_used = int(resp.headers.get("X-Ratelimit-Used"))
                 return await resp.json()
 
     # async def _get_release_details(self, tag_name: str):
@@ -96,7 +107,17 @@ class GithubUpdater:
             except Exception as e:
                 self.logging.error(f"Failed to check for updates: {e}\n{traceback.format_exc()}")
             finally:
-                await asyncio.sleep(90)
+                # Calculate how long to wait before checking again
+                if self.ratelimit_reset is not None and isinstance(self.ratelimit_reset, int):
+                    wait_time = (self.ratelimit_reset - int(round(time.time()))) + 15
+                    if wait_time > 0:
+                        self.logging.debug(f"Waiting {wait_time} seconds before checking again")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        self.logging.debug("Ratelimit reset in the past, checking again immediately")
+                else:
+                    self.logging.debug("No ratelimit reset found, waiting 120 seconds before checking again")
+                    await asyncio.sleep(120)
 
     async def make_recovery_shell_script(self):
         """Creates a shell script that can be used to restore the old version"""
