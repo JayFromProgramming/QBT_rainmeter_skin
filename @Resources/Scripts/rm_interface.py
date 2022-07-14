@@ -68,7 +68,7 @@ class RainMeterInterface:
             self.inhibitor_plug_task = self.event_loop.create_task(self.inhibitor_plugin.run(self.event_loop))
             self.refresh_task = self.event_loop.create_task(self.refresh_torrents())
 
-            self.auto_updater = auto_update.GithubUpdater("LOAFCLAN", "QBT_rainmeter_skin",
+            self.auto_updater = auto_update.GithubUpdater("JayFromProgramming", "QBT_rainmeter_skin",
                                                           restart_callback=self.on_update_installed,
                                                           update_available_callback=self.on_update_available,
                                                           logging=self.logging)
