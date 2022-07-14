@@ -105,28 +105,34 @@ class RainMeterInterface:
     def load_settings(self):
         """Loads the settings from the settings.json file"""
         # Combine all filters into one lambda expression
-        self.logging.debug("Loading settings")
-        if len(self.settings['filter']) == 0:
-            self.logging.debug("No filters set")
-            self.torrent_filter = lambda d: True
-        elif 'filter_all' in self.settings['filter']:
-            self.logging.debug("All torrents filter set")
-            self.torrent_filter = lambda d: True
-        elif 'filter_active' in self.settings['filter']:
-            self.logging.debug("Filtering active torrents")
-            self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
-        self.torrent_sort = lambda d: d[self.settings['sort_by']]
-        self.torrent_reverse = self.settings['reverse']
+        try:
+            self.logging.debug("Loading settings")
+            if len(self.settings['filter']) == 0:
+                self.logging.debug("No filters set")
+                self.torrent_filter = lambda d: True
+            elif 'filter_all' in self.settings['filter']:
+                self.logging.debug("All torrents filter set")
+                self.torrent_filter = lambda d: True
+            elif 'filter_active' in self.settings['filter']:
+                self.logging.debug("Filtering active torrents")
+                self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
+            self.torrent_sort = lambda d: d[self.settings['sort_by']]
+            self.torrent_reverse = self.settings['reverse']
+        except Exception as e:
+            self.logging.critical(f"Unable to load settings: {e}\n{traceback.format_exc()}")
 
     def set_settings(self, **kwargs):
-        if 'filter' in kwargs:
-            self.settings['filter_by'] = kwargs['filter_by']
-        if 'sort_by' in kwargs:
-            self.settings['sort_by'] = kwargs['sort_by']
-        if 'reverse' in kwargs:
-            self.settings['reverse'] = kwargs['reverse']
-        with open(os.path.join(pathlib.Path(__file__).parent.resolve(), "settings.json"), "w") as settings_file:
-            json.dump(self.settings, settings_file, indent=4)
+        try:
+            if 'filter' in kwargs:
+                self.settings['filter'] = kwargs['filter_by']
+            if 'sort_by' in kwargs:
+                self.settings['sort_by'] = kwargs['sort_by']
+            if 'reverse' in kwargs:
+                self.settings['reverse'] = kwargs['reverse']
+            with open(os.path.join(pathlib.Path(__file__).parent.resolve(), "settings.json"), "w") as settings_file:
+                json.dump(self.settings, settings_file, indent=4)
+        except Exception as e:
+            self.logging.critical(f"Unable to set settings: {e}\n{traceback.format_exc()}")
 
     async def on_update_installed(self):
         """Called when the update is installed"""
