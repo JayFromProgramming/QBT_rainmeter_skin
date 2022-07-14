@@ -124,10 +124,10 @@ class GithubUpdater:
                 self.logging.info("Already up to date - not updating")
                 with open(os.path.join(current_script_dir, "version.txt"), "w") as f:
                     f.write(latest_release["tag_name"])
-                return
+                return False
             elif result == "":
                 self.logging.info("Some unknown git error occured, not updating")
-                return  # Not sure what happened
+                return False  # Not sure what happened
             self.logging.info("Updated")
             # Run post update requirement update
             result = os.popen(f"{python_home}\\python -m pip install -r requirements.txt").read()
