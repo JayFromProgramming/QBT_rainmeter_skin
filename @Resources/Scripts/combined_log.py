@@ -30,7 +30,7 @@ class CombinedRotatingFileHandler(RotatingFileHandler):
 
     def __init__(self, filename: str = None, mode=None, encoding=None, delay=None, formatter=None, **kwargs):
         super().__init__(filename=filename, mode=mode, encoding=encoding, delay=delay,
-                         maxBytes=1024 * 1024 * 10, **kwargs)
+                         maxBytes=1024 * 1024, **kwargs)
         super().setFormatter(formatter)
         self.backupCount = 10
         self.rainmeter = None
