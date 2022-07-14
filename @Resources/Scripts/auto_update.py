@@ -109,23 +109,25 @@ class GithubUpdater:
             except Exception as e:
                 self.logging.error(f"Failed to check for updates: {e}\n{traceback.format_exc()}")
             finally:
-                # Calculate how long to wait before checking again
-                if self.bucket_reset is not None and isinstance(self.bucket_reset, int):
-                    # Calculate how long to wait before checking again based on remaining requests and reset time
-                    max_rps = self.bucket_remaining / (self.bucket_reset - time.time())
-
-                    # Make requests at 50% of the max requests per second
-                    rps = max_rps / 2
-                    wait_time = 1 / rps
-
-                    if wait_time > 0:
-                        self.logging.debug(f"Waiting {wait_time} seconds before checking again")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        self.logging.debug("Ratelimit reset in the past, checking again immediately")
-                else:
-                    self.logging.debug("No ratelimit reset found, waiting 120 seconds before checking again")
-                    await asyncio.sleep(120)
+                await asyncio.sleep(120)
+                # # Calculate how long to wait before checking again
+                # if self.bucket_reset is not None and isinstance(self.bucket_reset, int):
+                #     # Calculate how long to wait before checking again based on remaining requests and reset time
+                #     max_rps = self.bucket_remaining / (self.bucket_reset - time.time())
+                #
+                #     # Make requests at 50% of the max requests per second
+                #     rps = max_rps / 2
+                #     wait_time = 1 / rps
+                #
+                #     if wait_time > 0:
+                #         self.logging.debug(f"Waiting {wait_time} seconds before checking again")
+                #         await asyncio.sleep(wait_time)
+                #     else:
+                #         self.logging.debug("Ratelimit reset in the past, waiting 120 seconds")
+                #         await asyncio.sleep(120)
+                # else:
+                #     self.logging.debug("No ratelimit reset found, waiting 120 seconds before checking again")
+                #     await asyncio.sleep(120)
 
     async def make_recovery_shell_script(self):
         """Creates a shell script that can be used to restore the old version"""
