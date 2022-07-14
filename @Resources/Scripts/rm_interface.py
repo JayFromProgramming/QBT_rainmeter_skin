@@ -309,10 +309,10 @@ class RainMeterInterface:
 
         if 'inhibit_' in bang:
             if bang == 'inhibit_true':
-                await self.inhibitor_plugin.execute(inhibit=False, override=True)
+                await self.inhibitor_plugin.execute(inhibit=True, override=False)
                 self.logging.debug("Inhibitor set to true")
             if bang == 'inhibit_false':
-                await self.inhibitor_plugin.execute(inhibit=True, override=False)
+                await self.inhibitor_plugin.execute(inhibit=False, override=True)
                 self.logging.debug("Inhibitor set to false")
 
     async def tear_down(self):
