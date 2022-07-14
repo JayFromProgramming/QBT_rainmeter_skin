@@ -47,6 +47,9 @@ class RainMeterInterface:
 
             self.page_start = 0
             self.torrent_num = 0
+            self.torrent_sort = lambda d: d['added_on']
+            self.torrent_filter = lambda d: True
+            self.torrent_reverse = True
             self.logging.debug("Loading secrets.json")
             current_script_dir = pathlib.Path(__file__).parent.resolve()
             with open(os.path.join(current_script_dir, "secrets.json"), "r") as secrets_file:
@@ -147,9 +150,11 @@ class RainMeterInterface:
                     self.qb_data['global_dl'] = qb_data['server_state']['dl_info_speed']
                     self.qb_data['global_up'] = qb_data['server_state']['up_info_speed']
                     self.qb_data['total_peers'] = qb_data['server_state']['total_peer_connections']
-                    torrents = filter(lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles", torrents)
-                    torrents = sorted(torrents, key=lambda d: d['added_on'])
-                    torrents.reverse()
+                    torrents = filter(self.torrent_filter, torrents)
+                    torrents = sorted(torrents, key=self.torrent_sort)
+                    if self.torrent_reverse:
+                        torrents.reverse()
+                    # self.logging.debug(f"Sort by: {self.torrent_sort} first torrent: {torrents[0]}")
                     self.torrent_num = len(torrents)
                     self.torrents = torrents
             except Exception as e:
@@ -217,11 +222,31 @@ class RainMeterInterface:
                 python_home = self.rainmeter.RmReadString("PythonHome", r"C:\Program Files\Python36", False)
                 self.logging.info(f"Python home: {python_home}, preforming update")
                 refresh = await self.auto_updater.preform_update(python_home)
-                self.logging.info("Update complete")  # Literally the only way to know if the update was successful
+                self.logging.info("Update complete")
                 if not refresh:
                     self.rainmeter.RmExecute("[!RefreshApp]")
         except Exception as e:
             self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
+        if 'sort_' in bang:
+            if bang == 'sort_name':
+                self.torrent_sort = lambda d: d['name']
+                self.torrent_reverse = False
+            if bang == 'sort_added_date':
+                self.torrent_sort = lambda d: d['added_on']
+                self.torrent_reverse = True
+            if bang == 'sort_dl_speed':
+                self.torrent_sort = lambda d: d['dlspeed']
+                self.torrent_reverse = True
+            if bang == 'sort_ul_speed':
+                self.torrent_sort = lambda d: d['upspeed']
+                self.torrent_reverse = True
+            self.page_start = 0
+        if 'filter_' in bang:
+            if bang == 'filter_all':
+                self.torrent_filter = lambda d: True
+            if bang == 'filter_active':
+                self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
+            self.page_start = 0
 
     async def tear_down(self):
         """Call this when the plugin is being unloaded"""
