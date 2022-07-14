@@ -177,12 +177,12 @@ class RainMeterInterface:
             self.rainmeter_values['Title'] = {'Text': "BlockBust Viewer " + self.version}
             self.rainmeter_values['ConnectionMeter'] = {'Text': "Connected to " + self.qb_data['url'] +
                                                                 "  qBittorrent " + self.qb_data['version']}
-            if self.inhibitor_plugin.get_inhibitor_state():
-                self.rainmeter_values['PlayButton'] = {'Hidden': "0"}
-                self.rainmeter_values['PauseButton'] = {'Hidden': "1"}
-            else:
-                self.rainmeter_values['PlayButton'] = {'Hidden': "1"}
-                self.rainmeter_values['PauseButton'] = {'Hidden': "0"}
+            # if self.inhibitor_plugin.get_inhibitor_state():
+            #     self.rainmeter_values['PlayButton'] = {'Hidden': "0"}
+            #     self.rainmeter_values['PauseButton'] = {'Hidden': "1"}
+            # else:
+            #     self.rainmeter_values['PlayButton'] = {'Hidden': "1"}
+            #     self.rainmeter_values['PauseButton'] = {'Hidden': "0"}
             self.rainmeter_values['GlobalDownload'] = {
                 'Text': f"DL: {humanize.naturalsize(self.qb_data['global_dl'])}/s"}
             self.rainmeter_values['GlobalUpload'] = {
@@ -199,6 +199,10 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
+            if self.inhibitor_plugin.get_inhibitor_state():
+                self.bang_string += "[!HideMeter PauseButton][!ShowMeter PlayButton]"
+            else:
+                self.bang_string += "[!HideMeter PlayButton][!ShowMeter PauseButton]"
             self.getting_banged = False
 
     def get_string(self) -> str:
@@ -247,6 +251,14 @@ class RainMeterInterface:
             if bang == 'filter_active':
                 self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
             self.page_start = 0
+
+        if 'inhibit_' in bang:
+            if bang == 'inhibit_true':
+                await self.inhibitor_plugin.execute(inhibit=True, override=True)
+                self.logging.debug("Inhibitor set to true")
+            if bang == 'inhibit_false':
+                await self.inhibitor_plugin.execute(inhibit=False, override=True)
+                self.logging.debug("Inhibitor set to false")
 
     async def tear_down(self):
         """Call this when the plugin is being unloaded"""
