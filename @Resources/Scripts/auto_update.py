@@ -31,22 +31,24 @@ class GithubUpdater:
         self.on_update_available_callback = update_available_callback
         self.new_version_available = False
         self.logging = logging
-        self.ratelimit_remaining = ""
-        self.ratelimit_reset = 0
-        self.ratelimit_used = 0
+        self.bucket_remaining = 0  # How many requests are left in the bucket
+        self.bucket_reset = 0  # Unix timestamp for when the ratelimit bucket will be reset
+        self.bucket_used = 0  # How many requests have been used in the bucket
+        self.bucket_max = 0  # The maximum number of requests in the bucket
         cleanup()
 
     async def _get_latest_release(self):
 
-        if self.ratelimit_remaining == 0:
+        if self.bucket_remaining == 0:
             raise Exception("Ratelimit reached")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(f"https://api.github.com/repos/{self.owner}/{self.repo}/releases/latest") as resp:
                 # Get the ratelimit
-                self.ratelimit_remaining = int(resp.headers.get("X-Ratelimit-Remaining"))
-                self.ratelimit_reset = int(resp.headers.get("X-Ratelimit-Reset"))
-                self.ratelimit_used = int(resp.headers.get("X-Ratelimit-Used"))
+                self.bucket_remaining = int(resp.headers.get("X-Ratelimit-Remaining"))
+                self.bucket_reset = int(resp.headers.get("X-Ratelimit-Reset"))
+                self.bucket_used = int(resp.headers.get("X-Ratelimit-Used"))
+                self.bucket_max = int(resp.headers.get("X-Ratelimit-Limit"))
                 return await resp.json()
 
     # async def _get_release_details(self, tag_name: str):
@@ -108,8 +110,14 @@ class GithubUpdater:
                 self.logging.error(f"Failed to check for updates: {e}\n{traceback.format_exc()}")
             finally:
                 # Calculate how long to wait before checking again
-                if self.ratelimit_reset is not None and isinstance(self.ratelimit_reset, int):
-                    wait_time = (self.ratelimit_reset - int(round(time.time()))) + 15
+                if self.bucket_reset is not None and isinstance(self.bucket_reset, int):
+                    # Calculate how long to wait before checking again based on remaining requests and reset time
+                    max_rps = self.bucket_remaining / (self.bucket_reset - time.time())
+
+                    # Make requests at 50% of the max requests per second
+                    rps = max_rps / 2
+                    wait_time = 1 / rps
+
                     if wait_time > 0:
                         self.logging.debug(f"Waiting {wait_time} seconds before checking again")
                         await asyncio.sleep(wait_time)
