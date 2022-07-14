@@ -249,7 +249,7 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
-            if self.inhibitor_plugin.get_inhibitor_state():
+            if await self.inhibitor_plugin.get_inhibitor_state():
                 self.bang_string += "[!HideMeter PauseButton][!ShowMeter PlayButton]"
             else:
                 self.bang_string += "[!HideMeter PlayButton][!ShowMeter PauseButton]"
