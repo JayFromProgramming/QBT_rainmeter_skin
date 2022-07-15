@@ -288,7 +288,9 @@ class RainMeterInterface:
             self.rainmeter_values['FreeSpace'] = \
                 {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
             if not self.changing_state:
-                self.rainmeter_values['InhibitorMeter'] = {'Text': await self.inhibitor_plugin.get_inhibitor_status()}
+                self.rainmeter_values['InhibitorMeter'] = {'Text': await self.inhibitor_plugin.get_inhibitor_status(),
+                                                           'ToolTipText':
+                                                               await self.inhibitor_plugin.get_inhibitor_version()}
         except Exception as e:
             logging.error(f"Failed to parse rainmeter values: {e}\n{traceback.format_exc()}")
         else:
@@ -346,12 +348,17 @@ class RainMeterInterface:
             if 'inhibit_' in bang:
                 self.inhibitor_plugin.get_state_change().clear()
             self.changing_state = True
-            self.bang_string = ""if bang == 'inhibit_true':
-                    await self.inhibitor_plugin.execute(inhibit=True, override=False)
-                    self.logging.debug("Inhibitor set to true")self.event_loop.create_task(self.wait_for_change())
-                if bang == 'inhibit_false':
-                    await self.inhibitor_plugin.execute(inhibit=False, override=True)
-                    self.logging.debug("Inhibitor set to false")self.event_loop.create_task(self.wait_for_change())
+            self.bang_string = ""
+            if bang == 'inhibit_true':
+                await self.inhibitor_plugin.execute(inhibit=True, override=False)
+                self.logging.debug("Inhibitor set to true")
+                self.event_loop.create_task(self.wait_for_change())
+            if bang == 'inhibit_false':
+                await self.inhibitor_plugin.execute(inhibit=False, override=True)
+                self.logging.debug("Inhibitor set to false")
+                self.event_loop.create_task(self.wait_for_change())
+        except Exception as e:
+            logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
 
     async def wait_for_change(self):
         try:

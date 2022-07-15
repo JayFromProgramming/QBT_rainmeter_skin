@@ -22,6 +22,7 @@ class InhibitorState:
         self.connected_to_inhibitor = False
         self.message = None
         self.last_update = datetime.datetime.now()
+        self.version = "v0.0.0"
 
     def get_string(self) -> str:
         """Format the inhibitor state for use in Rainmeter"""
@@ -51,6 +52,9 @@ class InhibitorState:
 
     def __bool__(self):
         return self.inhibiting
+
+    def get_version(self):
+        return self.version
 
 
 class InhibitorPlugin:
@@ -89,6 +93,10 @@ class InhibitorPlugin:
     async def get_inhibitor_state(self) -> bool:
         """Get the current state of the inhibitor"""
         return bool(self.state)
+
+    async def get_inhibitor_version(self) -> str:
+        """Get the version of the inhibitor"""
+        return self.state.get_version()
 
     async def run(self, event_loop):
         """Run the plugin"""
@@ -188,16 +196,21 @@ class InhibitorPlugin:
                     if msg.msg_type == "state_update":
                         self.logging.debug(f"Received update message {msg}")
 
-                        if self.state.inhibiting != msg.inhibiting or self.state.inhibit_sources != msg.inhibited_by:
-                            self.state_change.set()
+                        try:
 
-                        self.state.inhibiting = msg.inhibiting
-                        self.state.inhibit_sources = msg.inhibited_by
-                        self.state.connected_to_qbt = msg.qbt_connection
-                        self.state.connected_to_plex = msg.plex_connection
-                        self.state.connected_to_inhibitor = self.connected
-                        self.state.last_update = datetime.datetime.now()
-                        self.state.message = msg.message
+                            if self.state.inhibiting != msg.inhibiting or self.state.inhibit_sources != msg.inhibited_by:
+                                self.state_change.set()
+
+                            self.state.inhibiting = msg.inhibiting
+                            self.state.inhibit_sources = msg.inhibited_by
+                            self.state.connected_to_qbt = msg.qbt_connection
+                            self.state.connected_to_plex = msg.plex_connection
+                            self.state.connected_to_inhibitor = self.connected
+                            self.state.last_update = datetime.datetime.now()
+                            self.state.message = msg.message
+                            self.state.version = msg.version
+                        except AttributeError:
+                            self.logging.error("Message is missing expected attributes")
 
                     elif msg.msg_type == "ack":
                         self.logging.debug(f"Received ack message")
