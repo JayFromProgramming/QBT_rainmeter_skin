@@ -62,6 +62,7 @@ class InhibitorPlugin:
         self.main_port = kwargs.get("main_port")
         self.alt_port = kwargs.get("alt_port")
         self.logging = kwargs.get("logging")
+        self.on_update_available = kwargs.get("on_update_available")
         self.reader = None
         self.write_lock = asyncio.Lock()
         self.writer = None
@@ -163,6 +164,13 @@ class InhibitorPlugin:
             self.logging.debug("Listener done")
         self.state.connected_to_inhibitor = False
 
+    async def send_sys_command(self, **kwargs):
+        """Send a system command to the api server"""
+        msg = APIMessageTX(msg_type="sys_command", **kwargs)
+        async with self.write_lock:
+            self.writer.write(msg.encode('utf-8'))
+            await self.writer.drain()
+
     async def _listener(self):
         """Listen to the assigned client"""
         while not self.terminate and self.state.connected_to_inhibitor:
@@ -180,7 +188,7 @@ class InhibitorPlugin:
                     if msg.msg_type == "state_update":
                         self.logging.debug(f"Received update message {msg}")
 
-                        if self.state.inhibiting != msg.inhibiting:
+                        if self.state.inhibiting != msg.inhibiting or self.state.inhibit_sources != msg.inhibited_by:
                             self.state_change.set()
 
                         self.state.inhibiting = msg.inhibiting
@@ -195,8 +203,7 @@ class InhibitorPlugin:
                         self.logging.debug(f"Received ack message")
                     elif msg.msg_type == "new_version":
                         self.logging.debug(f"Received new version message from inhibitor server")
-                        self.state.new_version = msg.version
-                        self.state.current_version = msg.current_version
+                        await self.on_update_available(newest=msg.new_version, current=msg.old_version)
                     else:
                         self.logging.warning(f"Unknown message type {msg.msg_type}")
                 except Exception as e:

@@ -84,7 +84,8 @@ class RainMeterInterface:
             self.bang_string = ""
             self.logging.debug("Launching background tasks")
             self.inhibitor_plugin = InhibitorPlugin(url="172.17.0.1", main_port=47675, alt_port=47676,
-                                                    logging=self.logging)
+                                                    logging=self.logging,
+                                                    on_update_available=self.inhibitor_update_available)
             self.rainmeter.RmLog(self.rainmeter.LOG_NOTICE, "Launching background tasks")
             self.inhibitor_plug_task = self.event_loop.create_task(self.inhibitor_plugin.run(self.event_loop))
             self.refresh_task = self.event_loop.create_task(self.refresh_torrents())
@@ -94,6 +95,7 @@ class RainMeterInterface:
                                                           update_available_callback=self.on_update_available,
                                                           logging=self.logging)
             self.auto_update_task = self.event_loop.create_task(self.auto_updater.run())
+            self.update_type_queued = None  # None, "local", "inhibitor"
             self.version = self.auto_updater.version()
 
             self.logging.debug("Background tasks launched")
@@ -140,31 +142,81 @@ class RainMeterInterface:
         self.rainmeter.RmExecute("[!RefreshApp]")
         self.logging.error("Oh fuck, oh fuck")
 
+    async def inhibitor_update_available(self, newest=None, current=None):
+        try:
+            if self.update_type_queued is not None:
+                return
+            await self.generate_update_popup(newest, current, source="QBT_inhibitor", u_type="inhibitor")
+        except Exception as e:
+            self.logging.critical(f"Unable to generate update popup: {e}\n{traceback.format_exc()}")
+
     async def on_update_available(self, newest=None, current=None):
         """Called when an update is available""
         Called when an update is available
         :return: Nothing
         """
+        if self.update_type_queued is not None:
+            return
         self.auto_update_task.cancel()  # Stop the auto updater so the user doesn't get multiple update prompts
-        ini_parser = configparser.ConfigParser()
-        with open(os.path.join(os.getenv('APPDATA'), 'Rainmeter\\Rainmeter.ini'), 'r', encoding='utf-16-le') as f:
-            ini_string = f.read()[1:]
-        ini_parser.read_string(ini_string)
-        if "QBT_rainmeter_skin" not in ini_parser:
-            self.logging.error("Unable to find qbittorrent skin.")
-            return 0
+        await self.generate_update_popup(newest, current, source="QBT_rainmeter_skin", u_type="local")
+
+    async def generate_update_popup(self, newest=None, current=None, source=None, u_type=None):
+        """Generates a popup to ask the user if they want to update"""
         try:
+            ini_parser = configparser.ConfigParser()
+            with open(os.path.join(os.getenv('APPDATA'), 'Rainmeter\\Rainmeter.ini'), 'r', encoding='utf-16-le') as f:
+                ini_string = f.read()[1:]
+            ini_parser.read_string(ini_string)
+            if "QBT_rainmeter_skin" not in ini_parser:
+                self.logging.error("Unable to find qbittorrent skin.")
+                return 0
+            source_text = f"An update is available for {source}\nWould you like to update?"
             qbt_x = ini_parser['QBT_rainmeter_skin']['WindowX']
             qbt_y = ini_parser['QBT_rainmeter_skin']['WindowY']
             bang = f"[!ActivateConfig \"QBT_rainmeter_skin\\update-popup\"]" \
                    f"[!ZPos \"2\" \"QBT_rainmeter_skin\\update-popup\"]" \
                    f"[!Move \"{int(qbt_x) + 172}\" \"{int(qbt_y) + 100}\" \"QBT_rainmeter_skin\\update-popup\"]" \
-                   f"[!SetOption CurrentVersion Text \"Current version: {current}\" \"QBT_rainmeter_skin\\update-popup\"]" \
+                   f"[!SetOption UpdateText Text \"{source_text}\" \"QBT_rainmeter_skin\\update-popup\"]" \
+                   f"[!SetOption CurrentVersion Text \"Current version: {current}\" \"QBT_rainmeter_skin\\update" \
+                   f"-popup\"]" \
                    f"[!SetOption NewVersion Text \"New version: {newest}\" \"QBT_rainmeter_skin\\update-popup\"]" \
                    f"[!Redraw \"QBT_rainmeter_skin\\update-popup\"]"
             self.rainmeter.RmExecute(bang)
+            self.update_type_queued = u_type
         except Exception as e:
             self.logging.error(f"Unable to show update popup: {e}\n{traceback.format_exc()}")
+
+    async def update_self(self):
+        """Updates the rainmeter skin"""
+        try:
+            self.logging.info("Updating...")
+            self.running = False
+            self.inhibitor_plug_task.cancel()
+            self.rainmeter.RmExecute("[!SetOption ConnectionMeter Text \"Performing update...\"]")
+            self.rainmeter.RmExecute("[!Redraw]")
+            python_home = self.rainmeter.RmReadString("PythonHome", r"C:\Program Files\Python36", False)
+            self.logging.info(f"Python home: {python_home}, preforming update")
+            refresh = await self.auto_updater.preform_update(python_home)
+            self.logging.info("Update complete")
+            if not refresh:
+                self.rainmeter.RmExecute("[!RefreshApp]")
+        except Exception as e:
+            self.logging.error(f"Unable to update: {e}\n{traceback.format_exc()}")
+
+    async def update_popup_callback(self, confirmed=None):
+        try:
+            self.rainmeter.RmExecute("[!DeactivateConfig \"QBT_rainmeter_skin\\update-popup\"]")
+            if confirmed:
+                if self.update_type_queued == "local":
+                    await self.update_self()
+                elif self.update_type_queued == "inhibitor":
+                    await self.inhibitor_plugin.send_sys_command(command="pref_update")
+            else:
+                if self.update_type_queued == "inhibitor":
+                    await self.inhibitor_plugin.send_sys_command(command="deny_update")
+            self.update_type_queued = None
+        except Exception as e:
+            self.logging.error(f"Unable to update popup callback: {e}\n{traceback.format_exc()}")
 
     def _on_refresh_task_finished(self):
         self.rainmeter.RmLog(self.rainmeter.LOG_NOTICE, "Refresh task finished")
@@ -263,60 +315,51 @@ class RainMeterInterface:
         """Called by the rainmeter plugin"""
         try:
             if bang == "updater_no":
-                self.logging.info("Update not allowed")
-                self.rainmeter.RmExecute("[!DeactivateConfig \"QBT_rainmeter_skin\\update-popup\"]")
+                await self.update_popup_callback(confirmed=False)
             if bang == "updater_yes":
-                self.logging.info("Updating...")
-                self.rainmeter.RmExecute("[!DeactivateConfig \"QBT_rainmeter_skin\\update-popup\"]")
-                self.running = False
-                self.inhibitor_plug_task.cancel()
-                self.rainmeter.RmExecute("[!SetOption ConnectionMeter Text \"Performing update...\"]")
-                self.rainmeter.RmExecute("[!Redraw]")
-                python_home = self.rainmeter.RmReadString("PythonHome", r"C:\Program Files\Python36", False)
-                self.logging.info(f"Python home: {python_home}, preforming update")
-                refresh = await self.auto_updater.preform_update(python_home)
-                self.logging.info("Update complete")
-                if not refresh:
-                    self.rainmeter.RmExecute("[!RefreshApp]")
+                await self.update_popup_callback(confirmed=True)
+
+            if 'sort_' in bang:
+                if bang == 'sort_name':
+                    self.torrent_sort = lambda d: d['name']
+                    self.torrent_reverse = False
+                    self.set_settings(sort_by='name', reverse=False)
+                if bang == 'sort_added_date':
+                    self.torrent_sort = lambda d: d['added_on']
+                    self.torrent_reverse = True
+                    self.set_settings(sort_by='added_on', reverse=True)
+                if bang == 'sort_dl_speed':
+                    self.torrent_sort = lambda d: d['dlspeed']
+                    self.torrent_reverse = True
+                    self.set_settings(sort_by='dlspeed', reverse=True)
+                if bang == 'sort_ul_speed':
+                    self.torrent_sort = lambda d: d['upspeed']
+                    self.torrent_reverse = True
+                    self.set_settings(sort_by='upspeed', reverse=True)
+                self.page_start = 0
+            if 'filter_' in bang:
+                if bang == 'filter_all':
+                    self.torrent_filter = lambda d: True
+                    self.set_settings(filter_by='filter_all')
+                if bang == 'filter_active':
+                    self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
+                    self.set_settings(filter_by='filter_active')
+                self.page_start = 0
+
+            if 'inhibit_' in bang:
+                if bang == 'inhibit_true':
+                    await self.inhibitor_plugin.execute(inhibit=True, override=False)
+                    self.logging.debug("Inhibitor set to true")
+                if bang == 'inhibit_false':
+                    await self.inhibitor_plugin.execute(inhibit=False, override=True)
+                    self.logging.debug("Inhibitor set to false")
+
         except Exception as e:
             self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
-        if 'sort_' in bang:
-            if bang == 'sort_name':
-                self.torrent_sort = lambda d: d['name']
-                self.torrent_reverse = False
-                self.set_settings(sort_by='name', reverse=False)
-            if bang == 'sort_added_date':
-                self.torrent_sort = lambda d: d['added_on']
-                self.torrent_reverse = True
-                self.set_settings(sort_by='added_on', reverse=True)
-            if bang == 'sort_dl_speed':
-                self.torrent_sort = lambda d: d['dlspeed']
-                self.torrent_reverse = True
-                self.set_settings(sort_by='dlspeed', reverse=True)
-            if bang == 'sort_ul_speed':
-                self.torrent_sort = lambda d: d['upspeed']
-                self.torrent_reverse = True
-                self.set_settings(sort_by='upspeed', reverse=True)
-            self.page_start = 0
-        if 'filter_' in bang:
-            if bang == 'filter_all':
-                self.torrent_filter = lambda d: True
-                self.set_settings(filter_by='filter_all')
-            if bang == 'filter_active':
-                self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
-                self.set_settings(filter_by='filter_active')
-            self.page_start = 0
-
-        if 'inhibit_' in bang:
-            if bang == 'inhibit_true':
-                await self.inhibitor_plugin.execute(inhibit=True, override=False)
-                self.logging.debug("Inhibitor set to true")
-            if bang == 'inhibit_false':
-                await self.inhibitor_plugin.execute(inhibit=False, override=True)
-                self.logging.debug("Inhibitor set to false")
 
     async def tear_down(self):
         """Call this when the plugin is being unloaded"""
         self.refresh_task.cancel()
         self.inhibitor_plug_task.cancel()
         self.auto_update_task.cancel()
+
