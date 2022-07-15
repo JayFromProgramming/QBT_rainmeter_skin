@@ -41,7 +41,7 @@ class Rain:
             try:
                 logging.info("Initializing CombinedLogger")
                 self.logging = CombinedLogger(
-                    name="Rainmeter", level=logging.INFO,
+                    name="Rainmeter", level=logging.DEBUG,
                     formatter=
                     r"%(asctime)s - %(levelname)s - Thread: %(threadName)s - %(name)s - %(funcName)s - %(message)s")
                 self.logging.setRMObject(rm)

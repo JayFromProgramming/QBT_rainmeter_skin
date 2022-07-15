@@ -98,7 +98,7 @@ class RainMeterInterface:
             self.auto_update_task = self.event_loop.create_task(self.auto_updater.run())
             self.update_type_queued = None  # None, "local", "inhibitor"
             self.version = self.auto_updater.version()
-            self.inhibitor_plugin.get_state_change().set()
+            # self.inhibitor_plugin.get_state_change().set()
             self.first_run_flag = False
             self.change_waitress = self.event_loop.create_task(self.wait_for_change())
 
@@ -271,12 +271,13 @@ class RainMeterInterface:
                 await asyncio.sleep(2)
 
     async def first_run(self):
-        if self.inhibitor_plugin.get_inhibitor_state():
-            self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
-        else:
-            self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
-        self.rainmeter.RmExecute(
-            f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
+        pass
+        # if self.inhibitor_plugin.get_inhibitor_state():
+        #     self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
+        # else:
+        #     self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
+        # self.rainmeter.RmExecute(
+        #     f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
 
     async def parse_rm_values(self):
         """Parse the rainmeter values"""
@@ -367,19 +368,20 @@ class RainMeterInterface:
         while self.running:
             try:
                 await self.inhibitor_plugin.get_state_change().wait()
+                self.logging.debug("Wait for change has been triggered")
                 self.rainmeter.RmExecute("[!HideMeter MeterLoadingAnimation]")
-                self.inhibitor_plugin.get_state_change().clear()
-                if self.inhibitor_plugin.get_inhibitor_state():
+                if await self.inhibitor_plugin.get_inhibitor_state():
                     self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
                 else:
                     self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
                 self.rainmeter.RmExecute(
                     f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
                 self.changing_state = False
-
+                self.inhibitor_plugin.get_state_change().clear()
             except Exception as e:
                 self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
-            await asyncio.sleep(1)
+            finally:
+                await asyncio.sleep(1)
 
     async def tear_down(self):
         """Call this when the plugin is being unloaded"""
