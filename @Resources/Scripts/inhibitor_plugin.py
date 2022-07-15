@@ -67,11 +67,12 @@ class InhibitorPlugin:
         self.writer = None
         self.terminate = False
         self.token = None
-        self.net_event = asyncio.Event()
+        self.state_change = asyncio.Event()
         self.state = InhibitorState()
 
-    async def get_update_event(self) -> asyncio.Event:
-        return self.net_event
+    def get_state_change(self) -> asyncio.Event:
+        """Get the state change event"""
+        return self.state_change
 
     async def execute(self, **kwargs) -> None:
         """Send a command to the api server"""
@@ -149,7 +150,7 @@ class InhibitorPlugin:
             self.logging.error(e)
             self.state.connected_to_inhibitor = False
             return
-        self. logging.info(f"Received token {self.token}")
+        self.logging.info(f"Received token {self.token}")
 
         # Start listening for messages
         self.event_loop.create_task(self._listener()).add_done_callback(self._listener_done)
@@ -178,6 +179,10 @@ class InhibitorPlugin:
                     msg = APIMessageRX(new_message)
                     if msg.msg_type == "state_update":
                         self.logging.debug(f"Received update message {msg}")
+
+                        if self.state.inhibiting != msg.inhibiting:
+                            self.state_change.set()
+
                         self.state.inhibiting = msg.inhibiting
                         self.state.inhibit_sources = msg.inhibited_by
                         self.state.connected_to_qbt = msg.qbt_connection
@@ -185,11 +190,15 @@ class InhibitorPlugin:
                         self.state.connected_to_inhibitor = self.connected
                         self.state.last_update = datetime.datetime.now()
                         self.state.message = msg.message
+
                     elif msg.msg_type == "ack":
                         self.logging.debug(f"Received ack message")
+                    elif msg.msg_type == "new_version":
+                        self.logging.debug(f"Received new version message from inhibitor server")
+                        self.state.new_version = msg.version
+                        self.state.current_version = msg.current_version
                     else:
                         self.logging.warning(f"Unknown message type {msg.msg_type}")
-                    self.net_event.set()
                 except Exception as e:
                     self.logging.error(e)
                     self.logging.error(new_message)
