@@ -22,7 +22,7 @@ class InhibitorState:
         self.connected_to_inhibitor = False
         self.message = None
         self.last_update = datetime.datetime.now()
-        self.version = "v0.0.0"
+        self.version = "V:unknown"
 
     def get_string(self) -> str:
         """Format the inhibitor state for use in Rainmeter"""
