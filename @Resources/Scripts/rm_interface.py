@@ -51,6 +51,7 @@ class RainMeterInterface:
             self.torrent_sort = lambda d: d['added_on']
             self.torrent_filter = lambda d: True
             self.torrent_reverse = True
+            self.changing_state = False
             self.logging.debug("Loading secrets.json")
             current_script_dir = pathlib.Path(__file__).parent.resolve()
 
@@ -279,12 +280,6 @@ class RainMeterInterface:
             self.rainmeter_values['Title'] = {'Text': "BlockBust Viewer " + self.version}
             self.rainmeter_values['ConnectionMeter'] = {'Text': "Connected to " + self.qb_data['url'] +
                                                                 "  qBittorrent " + self.qb_data['version']}
-            # if self.inhibitor_plugin.get_inhibitor_state():
-            #     self.rainmeter_values['PlayButton'] = {'Hidden': "0"}
-            #     self.rainmeter_values['PauseButton'] = {'Hidden': "1"}
-            # else:
-            #     self.rainmeter_values['PlayButton'] = {'Hidden': "1"}
-            #     self.rainmeter_values['PauseButton'] = {'Hidden': "0"}
             self.rainmeter_values['GlobalDownload'] = {
                 'Text': f"DL: {humanize.naturalsize(self.qb_data['global_dl'])}/s"}
             self.rainmeter_values['GlobalUpload'] = {
@@ -292,7 +287,8 @@ class RainMeterInterface:
             self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
             self.rainmeter_values['FreeSpace'] = \
                 {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
-            self.rainmeter_values['InhibitorMeter'] = {'Text': await self.inhibitor_plugin.get_inhibitor_status()}
+            if not self.changing_state:
+                self.rainmeter_values['InhibitorMeter'] = {'Text': await self.inhibitor_plugin.get_inhibitor_status()}
         except Exception as e:
             logging.error(f"Failed to parse rainmeter values: {e}\n{traceback.format_exc()}")
         else:
@@ -301,10 +297,11 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
-            if await self.inhibitor_plugin.get_inhibitor_state():
-                self.bang_string += "[!HideMeter PauseButton][!ShowMeter PlayButton]"
-            else:
-                self.bang_string += "[!HideMeter PlayButton][!ShowMeter PauseButton]"
+            if not self.changing_state:
+                if await self.inhibitor_plugin.get_inhibitor_state():
+                    self.bang_string += "[!HideMeter PauseButton][!ShowMeter PlayButton]"
+                else:
+                    self.bang_string += "[!HideMeter PlayButton][!ShowMeter PauseButton]"
             self.getting_banged = False
 
     def get_string(self) -> str:
@@ -347,12 +344,28 @@ class RainMeterInterface:
                 self.page_start = 0
 
             if 'inhibit_' in bang:
-                if bang == 'inhibit_true':
+                self.inhibitor_plugin.get_state_change().clear()
+            self.changing_state = True
+            self.bang_string = ""if bang == 'inhibit_true':
                     await self.inhibitor_plugin.execute(inhibit=True, override=False)
-                    self.logging.debug("Inhibitor set to true")
+                    self.logging.debug("Inhibitor set to true")self.event_loop.create_task(self.wait_for_change())
                 if bang == 'inhibit_false':
                     await self.inhibitor_plugin.execute(inhibit=False, override=True)
-                    self.logging.debug("Inhibitor set to false")
+                    self.logging.debug("Inhibitor set to false")self.event_loop.create_task(self.wait_for_change())
+
+    async def wait_for_change(self):
+        try:
+            await self.inhibitor_plugin.get_state_change().wait()
+            self.logging.debug("Inhibitor state changed")
+            self.rainmeter.RmExecute("[!HideMeter MeterLoadingAnimation]")
+            self.inhibitor_plugin.get_state_change().clear()
+            if self.inhibitor_plugin.get_inhibitor_state():
+                self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
+            else:
+                self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
+            self.rainmeter.RmExecute(
+                f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
+            self.changing_state = False
 
         except Exception as e:
             self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
