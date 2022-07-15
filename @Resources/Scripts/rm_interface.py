@@ -98,6 +98,9 @@ class RainMeterInterface:
             self.auto_update_task = self.event_loop.create_task(self.auto_updater.run())
             self.update_type_queued = None  # None, "local", "inhibitor"
             self.version = self.auto_updater.version()
+            self.inhibitor_plugin.get_state_change().set()
+            self.first_run_flag = False
+            self.change_waitress = self.event_loop.create_task(self.wait_for_change())
 
             self.logging.debug("Background tasks launched")
             self.refresh_task.add_done_callback(self._on_refresh_task_finished)
@@ -267,8 +270,19 @@ class RainMeterInterface:
                 await self.parse_rm_values()
                 await asyncio.sleep(2)
 
+    async def first_run(self):
+        if self.inhibitor_plugin.get_inhibitor_state():
+            self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
+        else:
+            self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
+        self.rainmeter.RmExecute(
+            f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
+
     async def parse_rm_values(self):
         """Parse the rainmeter values"""
+        if not self.first_run_flag:
+            self.first_run_flag = True
+            await self.first_run()
         logging.debug("Parsing rainmeter values")
         try:
             torrents = self.torrents[self.page_start:self.page_start + 4]
@@ -287,10 +301,6 @@ class RainMeterInterface:
             self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
             self.rainmeter_values['FreeSpace'] = \
                 {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
-            if not self.changing_state:
-                self.rainmeter_values['InhibitorMeter'] = {'Text': await self.inhibitor_plugin.get_inhibitor_status(),
-                                                           'ToolTipText':
-                                                               await self.inhibitor_plugin.get_inhibitor_version()}
         except Exception as e:
             logging.error(f"Failed to parse rainmeter values: {e}\n{traceback.format_exc()}")
         else:
@@ -299,11 +309,6 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
-            if not self.changing_state:
-                if await self.inhibitor_plugin.get_inhibitor_state():
-                    self.bang_string += "[!HideMeter PauseButton][!ShowMeter PlayButton]"
-                else:
-                    self.bang_string += "[!HideMeter PlayButton][!ShowMeter PauseButton]"
             self.getting_banged = False
 
     def get_string(self) -> str:
@@ -352,30 +357,29 @@ class RainMeterInterface:
             if bang == 'inhibit_true':
                 await self.inhibitor_plugin.execute(inhibit=True, override=False)
                 self.logging.debug("Inhibitor set to true")
-                self.event_loop.create_task(self.wait_for_change())
             if bang == 'inhibit_false':
                 await self.inhibitor_plugin.execute(inhibit=False, override=True)
                 self.logging.debug("Inhibitor set to false")
-                self.event_loop.create_task(self.wait_for_change())
         except Exception as e:
             logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
 
     async def wait_for_change(self):
-        try:
-            await self.inhibitor_plugin.get_state_change().wait()
-            self.logging.debug("Inhibitor state changed")
-            self.rainmeter.RmExecute("[!HideMeter MeterLoadingAnimation]")
-            self.inhibitor_plugin.get_state_change().clear()
-            if self.inhibitor_plugin.get_inhibitor_state():
-                self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
-            else:
-                self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
-            self.rainmeter.RmExecute(
-                f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
-            self.changing_state = False
+        while self.running:
+            try:
+                await self.inhibitor_plugin.get_state_change().wait()
+                self.rainmeter.RmExecute("[!HideMeter MeterLoadingAnimation]")
+                self.inhibitor_plugin.get_state_change().clear()
+                if self.inhibitor_plugin.get_inhibitor_state():
+                    self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
+                else:
+                    self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
+                self.rainmeter.RmExecute(
+                    f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
+                self.changing_state = False
 
-        except Exception as e:
-            self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
+            except Exception as e:
+                self.logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
+            await asyncio.sleep(1)
 
     async def tear_down(self):
         """Call this when the plugin is being unloaded"""

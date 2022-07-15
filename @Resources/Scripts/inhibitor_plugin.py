@@ -197,9 +197,15 @@ class InhibitorPlugin:
                         self.logging.debug(f"Received update message {msg}")
 
                         try:
+                            flag = False
 
-                            if self.state.inhibiting != msg.inhibiting or self.state.inhibit_sources != msg.inhibited_by:
-                                self.state_change.set()
+                            if self.state.inhibiting != msg.inhibiting or\
+                                    self.state.inhibit_sources != msg.inhibited_by or\
+                                    self.state.connected_to_plex != msg.plex_connection or\
+                                    self.state.connected_to_qbt != msg.qbt_connection or\
+                                    self.state.connected_to_inhibitor != self.connected or\
+                                    self.state.message != msg.message:
+                                flag = True
 
                             self.state.inhibiting = msg.inhibiting
                             self.state.inhibit_sources = msg.inhibited_by
@@ -209,6 +215,8 @@ class InhibitorPlugin:
                             self.state.last_update = datetime.datetime.now()
                             self.state.message = msg.message
                             self.state.version = msg.version
+                            if flag:
+                                self.state_change.set()
                         except AttributeError:
                             self.logging.error("Message is missing expected attributes")
 
