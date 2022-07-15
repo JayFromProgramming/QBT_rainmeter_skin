@@ -67,7 +67,11 @@ class InhibitorPlugin:
         self.writer = None
         self.terminate = False
         self.token = None
+        self.net_event = asyncio.Event()
         self.state = InhibitorState()
+
+    async def get_update_event(self) -> asyncio.Event:
+        return self.net_event
 
     async def execute(self, **kwargs) -> None:
         """Send a command to the api server"""
@@ -185,6 +189,7 @@ class InhibitorPlugin:
                         self.logging.debug(f"Received ack message")
                     else:
                         self.logging.warning(f"Unknown message type {msg.msg_type}")
+                    self.net_event.set()
                 except Exception as e:
                     self.logging.error(e)
                     self.logging.error(new_message)
