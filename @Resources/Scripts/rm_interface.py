@@ -361,6 +361,18 @@ class RainMeterInterface:
             if bang == 'inhibit_false':
                 await self.inhibitor_plugin.execute(inhibit=False, override=True)
                 self.logging.debug("Inhibitor set to false")
+
+            if 'page_' in bang:
+                if bang == 'page_right':
+                    self.page_start += 4
+                    if self.page_start > self.torrent_num - 4:
+                        self.page_start = self.torrent_num - 4
+                if bang == 'page_left':
+                    self.page_start -= 4
+                    if self.page_start < 0:
+                        self.page_start = 0
+                await self.parse_rm_values()
+                self.rainmeter.RmExecute(self.bang_string)
         except Exception as e:
             logging.error(f"Failed to execute bang: {e}\n{traceback.format_exc()}")
 
