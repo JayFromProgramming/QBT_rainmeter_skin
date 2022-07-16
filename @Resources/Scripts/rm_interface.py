@@ -183,8 +183,7 @@ class RainMeterInterface:
                    f"[!SetOption UpdateText Text \"{source_text}\" \"QBT_rainmeter_skin\\update-popup\"]" \
                    f"[!SetOption CurrentVersion Text \"Current version: {current}\" \"QBT_rainmeter_skin\\update" \
                    f"-popup\"]" \
-                   f"[!SetOption NewVersion Text \"New version: {newest}\" \"QBT_rainmeter_skin\\update-popup\"]" \
-                   f"[!Redraw \"QBT_rainmeter_skin\\update-popup\"]"
+                   f"[!SetOption NewVersion Text \"New version: {newest}\" \"QBT_rainmeter_skin\\update-popup\"]"
             self.rainmeter.RmExecute(bang)
             self.update_type_queued = u_type
         except Exception as e:
@@ -400,4 +399,3 @@ class RainMeterInterface:
         self.refresh_task.cancel()
         self.inhibitor_plug_task.cancel()
         self.auto_update_task.cancel()
-
