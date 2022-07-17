@@ -301,6 +301,8 @@ class RainMeterInterface:
             self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
             self.rainmeter_values['FreeSpace'] = \
                 {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
+            self.rainmeter_values['InhibitorMeter'] = \
+                {'ToolTipText': 'Version: ' + await self.inhibitor_plugin.get_inhibitor_version()}
         except Exception as e:
             logging.error(f"Failed to parse rainmeter values: {e}\n{traceback.format_exc()}")
         else:
