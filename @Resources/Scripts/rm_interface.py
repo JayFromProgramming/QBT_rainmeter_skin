@@ -48,6 +48,7 @@ class RainMeterInterface:
 
             self.page_start = 0
             self.torrent_num = 0
+            self.page_num = 1
             self.torrent_sort = lambda d: d['added_on']
             self.torrent_filter = lambda d: True
             self.torrent_reverse = True
@@ -270,7 +271,19 @@ class RainMeterInterface:
                 await asyncio.sleep(2)
 
     async def first_run(self):
-        pass
+        if self.settings['sort_by'] == 'name':
+            self.rainmeter.RmExecute("[!SetOption SortDropdownBoxText Text \"Sort by: Name\"]")
+        elif self.settings['sort_by'] == 'added_on':
+            self.rainmeter.RmExecute("[!SetOption SortDropdownBoxText Text \"Sort by: Added Date\"]")
+        elif self.settings['sort_by'] == 'upspeed':
+            self.rainmeter.RmExecute("[!SetOption SortDropdownBoxText Text \"Sort by: UL Speed\"]")
+        elif self.settings['sort_by'] == 'dlspeed':
+            self.rainmeter.RmExecute("[!SetOption SortDropdownBoxText Text \"Sort by: DL Speed\"]")
+        if 'filter_all' in self.settings['filter']:
+            self.rainmeter.RmExecute("[!SetOption FilterDropdownBoxText Text \"Filter by: All\"]")
+        elif 'filter_active' in self.settings['filter']:
+            self.rainmeter.RmExecute("[!SetOption FilterDropdownBoxText Text \"Filter by: Active\"]")
+        return True
         # if self.inhibitor_plugin.get_inhibitor_state():
         #     self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
         # else:
@@ -301,6 +314,7 @@ class RainMeterInterface:
             self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
             self.rainmeter_values['FreeSpace'] = \
                 {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
+            self.rainmeter_values['PageNumber'] = {'Text': f"{self.page_num}/{self.torrent_num // 4}"}
             self.rainmeter_values['InhibitorMeter'] = \
                 {'ToolTipText': 'Version: ' + await self.inhibitor_plugin.get_inhibitor_version()}
         except Exception as e:
@@ -365,13 +379,20 @@ class RainMeterInterface:
 
             if 'page_' in bang:
                 if bang == 'page_right':
-                    self.page_start += 4
-                    if self.page_start > self.torrent_num - 4:
-                        self.page_start = self.torrent_num - 4
+                    if not self.page_start + 4 == self.torrent_num:
+                        self.page_start += 4
+                        self.page_num += 1
+                        if self.page_start > self.torrent_num - 4:
+                            self.page_start = self.torrent_num - 4
                 if bang == 'page_left':
-                    self.page_start -= 4
-                    if self.page_start < 0:
-                        self.page_start = 0
+                    if not self.page_start == 0:
+                        self.page_start -= 4
+                        self.page_num -= 1
+                        if self.page_start < 0:
+                            self.page_start = 0
+                if bang == 'page_reset':
+                    self.page_start = 0
+                    self.page_num = 1
                 await self.parse_rm_values()
                 self.rainmeter.RmExecute(self.bang_string)
         except Exception as e:
