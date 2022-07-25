@@ -325,6 +325,11 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
+                for i in range(len(torrents)):
+                    if 'better_rss' in torrents[i]['tags']:
+                        self.bang_string += f"[!ShowMeter RSSIcon{i}]"
+                    else:
+                        self.bang_string += f"[!HideMeter RSSIcon{i}]"
             self.getting_banged = False
 
     def get_string(self) -> str:
