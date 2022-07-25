@@ -68,7 +68,10 @@ def torrent_format(tr_dict):
     for i in range(4):
         rm_values[f'TorrentName{i}'] = {'Text': tr_dict[i]['name']}
         rm_values[f'TorrentName{i}']['ToolTipText'] = tr_dict[i]['name']
-        save_path = os.path.abspath(tr_dict[i]['content_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
+        if tr_dict[i]['content_path'][:tr_dict[i]['content_path'].rfind('/')] == tr_dict[i]['save_path']:
+            save_path = os.path.abspath(tr_dict[i]['save_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
+        else:
+            save_path = os.path.abspath(tr_dict[i]['content_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
         script_path = os.path.join(pathlib.Path(__file__).parent.resolve(), "openfolder.bat")
         rm_values[f'TorrentName{i}']['LeftMouseDoubleClickAction'] = f"\"\"[\"{script_path}\" \"{save_path}\"]\"\""
         rm_values[f'TorrentStatus{i}'] = {'Text': tr_dict[i]['state'][0].upper() + tr_dict[i]['state'][1:]}
