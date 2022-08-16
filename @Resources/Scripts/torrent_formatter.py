@@ -93,3 +93,20 @@ def torrent_format(tr_dict):
         )}
         rm_values[f'TorrentRatio{i}'] = {'Text': f"Ratio: {tr_dict[i]['ratio']:.2f}"}
     return rm_values
+
+
+def no_torrent_template():
+    rm_values = {}
+    for i in range(4):
+        rm_values[f'TorrentName{i}'] = {'Text': "No Info", 'ToolTipText': "No Info", 'LeftMouseDoubleClickAction': ""}
+        rm_values[f'TorrentStatus{i}'] = {'Text': "Unknown"}
+        rm_values[f'TorrentDSpeed{i}'] = {'Text': "Down speed: 0B/s"}
+        rm_values[f'TorrentSeeds{i}'] = {'Text': "Seeds: 0(0)"}
+        rm_values[f'TorrentETA{i}'] = {'Text': "ETA: ∞"}
+        rm_values[f'TorrentPercentage{i}'] = {'Text': "0%"}
+        rm_values[f'TorrentProgress{i}'] = {'Text': "0B/0B"}
+        rm_values[f'TorrentProgressBar{i}'] = {'BarColor': _barColors['Unknown']}
+        rm_values[f'TorrentUSpeed{i}'] = {'Text': "Up speed: 0B/s"}
+        rm_values[f'TorrentAddedOn{i}'] = {'Text': "Never"}
+        rm_values[f'TorrentRatio{i}'] = {'Text': "Ratio: 0.00"}
+    return rm_values

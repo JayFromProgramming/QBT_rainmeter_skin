@@ -20,8 +20,11 @@ class InhibitorState:
         self.overridden = False
         self.connected_to_qbt = False
         self.connected_to_plex = False
+        self.connected_to_net = False
         self.connected_to_inhibitor = False
         self.message = None
+        self.ticker_text = []
+        self.has_errors = False
         self.last_update = datetime.datetime.now()
         self.version = "V:unknown"
 
@@ -30,14 +33,19 @@ class InhibitorState:
         string = "U.Speed:"
         if self.message is not "" and self.message is not None:
             return string + f" {self.message}"
-        if not self.connected_to_inhibitor:
-            string += " Disconnected"
-            return string
+
         if not self.connected_to_qbt:
             string += " No QBT connection"
             return string
         if not self.connected_to_plex:
             string += " No Plex connection"
+            return string
+        if not self.connected_to_net:
+            string += " WG connection down"
+            return string
+
+        if not self.connected_to_inhibitor:
+            string += " Disconnected"
             return string
 
         if self.inhibiting:
@@ -51,6 +59,41 @@ class InhibitorState:
                 string += " - Auto"
         return string
 
+    def build_ticker_text(self) -> None:
+        """Build each string that goes into the ticker"""
+        self.ticker_text = []
+
+        if not self.connected_to_inhibitor:
+            self.ticker_text.append("U.Speed: Disconnected")
+            return
+
+        if self.inhibiting:
+            string = "U.Speed: Inhibited - "
+            for source in self.inhibit_sources:
+                string += f"{source} - "
+            string = string[:-3]
+            self.ticker_text.append(string)
+        else:
+            text = "U.Speed: Uninhibited"
+            if not self.overridden:
+                text += " - Auto"
+            self.ticker_text.append(text)
+
+        self.has_errors = False
+        if not self.connected_to_qbt:
+            self.ticker_text.append("U.Speed: No QBT connection")
+            self.has_errors = True
+        if not self.connected_to_plex:
+            self.ticker_text.append("U.Speed: No Plex connection")
+            self.has_errors = True
+        if not self.connected_to_net:
+            self.ticker_text.append("U.Speed: WG connection down")
+            self.has_errors = True
+
+    def get_ticker_text(self) -> list:
+        """Returns a list of strings to display in the ticker"""
+        return self.ticker_text
+
     def __bool__(self):
         return self.inhibiting
 
@@ -62,20 +105,23 @@ class InhibitorState:
         self.inhibit_sources = msg.inhibited_by
         self.connected_to_qbt = msg.qbt_connection
         self.connected_to_plex = msg.plex_connection
+        if hasattr(msg, "net_connection"):
+            self.connected_to_net = msg.net_connection
         self.last_update = datetime.datetime.now()
         self.message = msg.message
         if hasattr(msg, "version"):
             self.version = msg.version
+        self.build_ticker_text()
 
     def __eq__(self, other):
         if isinstance(other, InhibitorState):
-            return self.get_string() == other.get_string()
+            return self.get_string() == other.get_string() and self.inhibiting == other.inhibiting
         elif isinstance(other, APIMessageRX):
             temp_state = InhibitorState()
             temp_state.connected_to_inhibitor = self.connected_to_inhibitor
             temp_state.msg_loader(other)
             # Compare the string representations of the two states
-            return self.get_string() == temp_state.get_string()
+            return self == temp_state
 
 
 class InhibitorPlugin:
@@ -95,6 +141,7 @@ class InhibitorPlugin:
         self.token = None
         self.state_change = asyncio.Event()
         self.state = InhibitorState()
+        self.ticker_position = 0
 
     def get_state_change(self) -> asyncio.Event:
         """Get the state change event"""
@@ -106,6 +153,19 @@ class InhibitorPlugin:
         async with self.write_lock:
             self.writer.write(msg.encode('utf-8'))
             await self.writer.drain()
+
+    def should_cycle_status(self) -> bool:
+        """Check if the status should be cycled"""
+        if self.state.has_errors:
+            return True
+
+    def get_ticker_text(self) -> str:
+        """Get the ticker text"""
+        if self.ticker_position >= len(self.state.get_ticker_text()):
+            self.ticker_position = 0
+        text = self.state.get_ticker_text()[self.ticker_position]
+        self.ticker_position += 1
+        return text
 
     async def get_inhibitor_status(self) -> str:
         """Does like magic or something, I don't know"""

@@ -14,7 +14,7 @@ from qbittorrent import Client
 import auto_update
 import combined_log
 from inhibitor_plugin import InhibitorPlugin
-from torrent_formatter import torrent_format
+from torrent_formatter import torrent_format, no_torrent_template
 
 
 class RainMeterInterface:
@@ -284,12 +284,6 @@ class RainMeterInterface:
         elif 'filter_active' in self.settings['filter']:
             self.rainmeter.RmExecute("[!SetOption FilterDropdownBoxText Text \"Filter by: Active\"]")
         return True
-        # if self.inhibitor_plugin.get_inhibitor_state():
-        #     self.rainmeter.RmExecute("[!ShowMeter PlayButton][!HideMeter PauseButton]")
-        # else:
-        #     self.rainmeter.RmExecute("[!ShowMeter PauseButton][!HideMeter PlayButton]")
-        # self.rainmeter.RmExecute(
-        #     f"[!SetOption InhibitorMeter Text \"" + await self.inhibitor_plugin.get_inhibitor_status() + "\"]")
 
     async def parse_rm_values(self):
         """Parse the rainmeter values"""
@@ -297,34 +291,51 @@ class RainMeterInterface:
             self.first_run_flag = True
             await self.first_run()
         logging.debug("Parsing rainmeter values")
+
         try:
-            torrents = self.torrents[self.page_start:self.page_start + 4]
-            tprogress = {'progress': []}
-            for torrent in torrents:
-                tprogress['progress'].append(torrent['progress'] * 100.0)
-            self.torrent_progress = json.dumps(tprogress)
-            self.rainmeter_values = torrent_format(torrents)
-            self.rainmeter_values['Title'] = {'Text': "BlockBust Viewer " + self.version}
-            self.rainmeter_values['ConnectionMeter'] = {'Text': "Connected to " + self.qb_data['url'] +
-                                                                "  qBittorrent " + self.qb_data['version']}
-            self.rainmeter_values['GlobalDownload'] = {
-                'Text': f"DL: {humanize.naturalsize(self.qb_data['global_dl'])}/s"}
-            self.rainmeter_values['GlobalUpload'] = {
-                'Text': f"UP: {humanize.naturalsize(self.qb_data['global_up'])}/s"}
-            self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
-            self.rainmeter_values['FreeSpace'] = \
-                {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
-            self.rainmeter_values['PageNumber'] = {'Text': f"{self.page_num}/{self.torrent_num // 4}"}
-            self.rainmeter_values['InhibitorMeter'] = \
-                {'ToolTipText': 'Version: ' + await self.inhibitor_plugin.get_inhibitor_version()}
+            if not self.qb_connected:
+                """Set all torrent slots to an error state"""
+                self.rainmeter_values = no_torrent_template()
+                self.rainmeter_values["ConnectionMeter"] = {"Text": f"Not connected to {self.qb_data['url']}"}
+                self.rainmeter_values["GlobalDownload"] = {"Text": "0B/s"}
+                self.rainmeter_values["GlobalUpload"] = {"Text": "0B/s"}
+                self.rainmeter_values['GlobalPeers'] = {"Text": "Connected peers: ???"}
+                self.rainmeter_values['FreeSpace'] = {"Text": "Free space: ???"}
+                self.rainmeter_values['PageNumber'] = {'Text': "1/1"}
+            else:
+                torrents = self.torrents[self.page_start:self.page_start + 4]
+                tprogress = {'progress': []}
+                for torrent in torrents:
+                    tprogress['progress'].append(torrent['progress'] * 100.0)
+                self.torrent_progress = json.dumps(tprogress)
+                self.rainmeter_values = torrent_format(torrents)
+                self.rainmeter_values['Title'] = {'Text': f"BlockBust Viewer {self.version}"}
+                self.rainmeter_values['ConnectionMeter'] = {'Text': f"Connected to {self.qb_data['url']} "
+                                                                    f"qBittorrent {self.qb_data['version']}"}
+                self.rainmeter_values['GlobalDownload'] = {
+                    'Text': f"DL: {humanize.naturalsize(self.qb_data['global_dl'])}/s"}
+                self.rainmeter_values['GlobalUpload'] = {
+                    'Text': f"UP: {humanize.naturalsize(self.qb_data['global_up'])}/s"}
+                self.rainmeter_values['GlobalPeers'] = {'Text': f"Connected peers: {self.qb_data['total_peers']}"}
+                self.rainmeter_values['FreeSpace'] = \
+                    {'Text': f"Free space: {humanize.naturalsize(self.qb_data['free_space'])}"}
+                self.rainmeter_values['PageNumber'] = {'Text': f"{self.page_num}/{self.torrent_num // 4}"}
+                self.rainmeter_values['InhibitorMeter'] = \
+                    {'ToolTipText': 'Version: ' + await self.inhibitor_plugin.get_inhibitor_version()}
+
+                if self.inhibitor_plugin.should_cycle_status():
+                    self.rainmeter_values['InhibitorMeter'] = {'Text': self.inhibitor_plugin.get_ticker_text()}
+
         except Exception as e:
             logging.error(f"Failed to parse rainmeter values: {e}\n{traceback.format_exc()}")
+            self.rainmeter_values = {}
         else:
             self.getting_banged = True
             self.bang_string = ""
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
+                torrents = self.torrents[self.page_start:self.page_start + 4]
                 for i in range(len(torrents)):
                     if 'better_rss' in torrents[i]['tags']:
                         self.bang_string += f"[!ShowMeter RSSIcon{i}]"
