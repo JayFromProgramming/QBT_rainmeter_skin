@@ -63,6 +63,10 @@ class InhibitorState:
         """Build each string that goes into the ticker"""
         self.ticker_text = []
 
+        # if self.message is not "" and self.message is not None:
+        #     self.ticker_text.append(self.message)
+        #     return
+
         if not self.connected_to_inhibitor:
             self.ticker_text.append("U.Speed: Disconnected")
             return
