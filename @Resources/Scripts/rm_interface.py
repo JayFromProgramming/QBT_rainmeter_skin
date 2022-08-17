@@ -9,6 +9,7 @@ from os.path import exists
 
 import humanize
 import qbittorrent.client
+import requests
 from qbittorrent import Client
 
 import auto_update
@@ -251,6 +252,13 @@ class RainMeterInterface:
                     self.qb_data['version'] = self.qb.qbittorrent_version
                 except qbittorrent.client.LoginRequired:
                     self.qb_connected = False
+                    self.logging.critical("Login required")
+                except requests.exceptions.HTTPError as e:
+                    self.qb_connected = False
+                    self.logging.critical(f"HTTP error: {e}")
+                except Exception as e:
+                    self.qb_connected = False
+                    self.logging.error(f"Unable to get torrents: {e}\n{traceback.format_exc()}")
                 else:
                     self.qb_data['free_space'] = qb_data['server_state']['free_space_on_disk']
                     self.qb_data['global_dl'] = qb_data['server_state']['dl_info_speed']
@@ -265,7 +273,6 @@ class RainMeterInterface:
                     self.torrents = torrents
             except Exception as e:
                 logging.error(f"Failed to get torrents: {e}\n{traceback.format_exc()}")
-                await asyncio.sleep(5)
             finally:
                 await self.parse_rm_values()
                 await asyncio.sleep(2)
@@ -290,7 +297,7 @@ class RainMeterInterface:
         if not self.first_run_flag:
             self.first_run_flag = True
             await self.first_run()
-        logging.debug("Parsing rainmeter values")
+        logging.info("Parsing rainmeter values")
 
         try:
             if not self.qb_connected:
