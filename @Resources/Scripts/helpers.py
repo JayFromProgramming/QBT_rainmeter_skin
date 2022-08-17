@@ -26,6 +26,7 @@ class APIMessageRX:
             self.__dict__.update(json.loads(json_raw))  # Load the json into the locals()
         except json.decoder.JSONDecodeError:
             self.__dict__ = {"error": "Invalid JSON"}
+            raise Exception("Invalid JSON")
 
     def __str__(self):
         """Dump the api content to json"""
@@ -33,4 +34,4 @@ class APIMessageRX:
 
     def encode(self, encoding):
         """Encode the api content to bytes"""
-        return self.__str__().encode(encoding)
+        return self.__str__().encode(encoding) + b"\n\r"

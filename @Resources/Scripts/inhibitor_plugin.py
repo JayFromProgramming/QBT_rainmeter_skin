@@ -140,6 +140,7 @@ class InhibitorPlugin:
         self.on_update_available = kwargs.get("on_update_available")
         self.reader = None
         self.write_lock = asyncio.Lock()
+        self.was_cycling = False
         self.writer = None
         self.terminate = False
         self.token = None
@@ -161,6 +162,10 @@ class InhibitorPlugin:
     def should_cycle_status(self) -> bool:
         """Check if the status should be cycled"""
         if self.state.has_errors:
+            self.was_cycling = True
+            return True
+        if self.was_cycling:
+            self.was_cycling = False
             return True
 
     def get_ticker_text(self) -> str:
