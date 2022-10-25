@@ -68,12 +68,12 @@ def torrent_format(tr_dict):
     for i in range(4):
         rm_values[f'TorrentName{i}'] = {'Text': tr_dict[i]['name']}
         rm_values[f'TorrentName{i}']['ToolTipText'] = tr_dict[i]['name']
-        if tr_dict[i]['content_path'][:tr_dict[i]['content_path'].rfind('/')] == tr_dict[i]['save_path']:
-            save_path = os.path.abspath(tr_dict[i]['save_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
+        temp_path = os.path.abspath(tr_dict[i]['content_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
+        if os.path.isdir(temp_path):
+            save_path = temp_path
         else:
-            save_path = os.path.abspath(tr_dict[i]['content_path'].replace("/mnt/qnap/Shared", r"\\172.17.0.1\Shared"))
-        script_path = os.path.join(pathlib.Path(__file__).parent.resolve(), "openfolder.bat")
-        rm_values[f'TorrentName{i}']['LeftMouseDoubleClickAction'] = f"\"\"[\"{script_path}\" \"{save_path}\"]\"\""
+            save_path = os.path.dirname(temp_path)
+        rm_values[f'TorrentName{i}']['LeftMouseDoubleClickAction'] = f"\"\"[\"explorer.exe\" \"{save_path}\"]\"\""
         rm_values[f'TorrentStatus{i}'] = {'Text': tr_dict[i]['state'][0].upper() + tr_dict[i]['state'][1:]}
         rm_values[f'TorrentDSpeed{i}'] = {'Text': "Down speed: " + humanize.naturalsize(tr_dict[i]['dlspeed']) + "/s"}
         if rm_values[f'TorrentStatus{i}']['Text'] in _show_seeders:
