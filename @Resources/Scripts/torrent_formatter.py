@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 
@@ -92,6 +93,7 @@ def torrent_format(tr_dict):
             datetime.fromtimestamp(tr_dict[i]['added_on'], tz=timezone("US/Eastern")).replace(tzinfo=None)
         )}
         rm_values[f'TorrentRatio{i}'] = {'Text': f"Ratio: {tr_dict[i]['ratio']:.2f}"}
+    logging.debug(f"First torrent: {rm_values['TorrentName0']}")
     return rm_values
 
 

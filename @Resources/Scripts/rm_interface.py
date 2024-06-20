@@ -20,7 +20,7 @@ from torrent_formatter import torrent_format, no_torrent_template
 
 class RainMeterInterface:
 
-    def __init__(self, rainmeter, event_loop, logging: combined_log.CombinedLogger):
+    def __init__(self, rainmeter, event_loop, logging: combined_log.CombinedLogger, debug=False):
         try:
             self.logging = logging
             self.logging.change_log_file(os.path.join(pathlib.Path(__file__).parent.resolve(), "Logs/Log.log"))
@@ -31,6 +31,7 @@ class RainMeterInterface:
             self.logging.debug("Initializing RainMeterInterface")
             self.rainmeter = rainmeter
             self.event_loop = event_loop
+            self.debug = debug
 
             self.running = True
             self.torrents = {}
@@ -50,6 +51,7 @@ class RainMeterInterface:
             self.page_start = 0
             self.torrent_num = 0
             self.page_num = 1
+            self.rid = 0  # For querying main data
             self.torrent_sort = lambda d: d['added_on']
             self.torrent_filter = lambda d: True
             self.torrent_reverse = True
@@ -89,7 +91,8 @@ class RainMeterInterface:
             self.inhibitor_plugin = InhibitorPlugin(url="172.17.0.1", main_port=47675, alt_port=47676,
                                                     logging=self.logging,
                                                     on_update_available=self.inhibitor_update_available)
-            self.rainmeter.RmLog(self.rainmeter.LOG_NOTICE, "Launching background tasks")
+            if not self.debug:
+                self.rainmeter.RmLog(self.rainmeter.LOG_NOTICE, "Launching background tasks")
             self.inhibitor_plug_task = self.event_loop.create_task(self.inhibitor_plugin.run(self.event_loop))
             self.refresh_task = self.event_loop.create_task(self.refresh_torrents())
 
@@ -246,8 +249,18 @@ class RainMeterInterface:
                 if not self.qb_connected:
                     self._connect()
                 try:
-                    torrents = self.qb.torrents()
-                    qb_data = self.qb.sync_main_data()
+                    # Do all torrent sorting and filtering on server side
+                    torrent_filter = 'active' if self.settings['filter'] == 'filter_active' else 'all'
+                    torrents = self.qb.torrents(
+                        filter=torrent_filter,
+                        sort=self.settings['sort_by'],
+                        limit=4,
+                        offset=self.page_start,
+                        reverse=self.settings['reverse']
+                    )
+                    self.logging.debug(f"Page start: {self.page_start}")
+                    self.logging.debug(f"First torrent: {torrents[0]['name']}")
+                    qb_data = self.qb.sync_main_data(rid=self.rid)
                     self.qb_data['url'] = self.qb.url.split("/")[2]
                     self.qb_data['version'] = self.qb.qbittorrent_version
                 except qbittorrent.client.LoginRequired:
@@ -260,19 +273,21 @@ class RainMeterInterface:
                     self.qb_connected = False
                     self.logging.error(f"Unable to get torrents: {e}\n{traceback.format_exc()}")
                 else:
-                    self.qb_data['free_space'] = qb_data['server_state']['free_space_on_disk']
-                    self.qb_data['global_dl'] = qb_data['server_state']['dl_info_speed']
-                    self.qb_data['global_up'] = qb_data['server_state']['up_info_speed']
-                    self.qb_data['total_peers'] = qb_data['server_state']['total_peer_connections']
-                    torrents = filter(self.torrent_filter, torrents)
-                    torrents = sorted(torrents, key=self.torrent_sort)
-                    if self.torrent_reverse:
-                        torrents.reverse()
+                    if 'free_space_on_disk' in qb_data['server_state']:
+                        self.qb_data['free_space'] = qb_data['server_state']['free_space_on_disk']
+                    if 'dl_info_speed' in qb_data['server_state']:
+                        self.qb_data['global_dl'] = qb_data['server_state']['dl_info_speed']
+                    if 'up_info_speed' in qb_data['server_state']:
+                        self.qb_data['global_up'] = qb_data['server_state']['up_info_speed']
+                    if 'total_peer_connections' in qb_data['server_state']:
+                        self.qb_data['total_peers'] = qb_data['server_state']['total_peer_connections']
+                    if 'full_update' in qb_data and qb_data['full_update']:
+                        self.torrent_num = len(qb_data['torrents'])
+                    self.rid = qb_data['rid']
                     # self.logging.debug(f"Sort by: {self.torrent_sort} first torrent: {torrents[0]}")
-                    self.torrent_num = len(torrents)
                     self.torrents = torrents
             except Exception as e:
-                logging.error(f"Failed to get torrents: {e}\n{traceback.format_exc()}")
+                self.logging.error(f"Failed to get torrents: {e}\n{traceback.format_exc()}")
             finally:
                 await self.parse_rm_values()
                 await asyncio.sleep(2)
@@ -296,8 +311,9 @@ class RainMeterInterface:
         """Parse the rainmeter values"""
         if not self.first_run_flag:
             self.first_run_flag = True
-            await self.first_run()
-        logging.info("Parsing rainmeter values")
+            if not self.debug:
+                await self.first_run()
+        self.logging.debug("Parsing rainmeter values")
 
         try:
             if not self.qb_connected:
@@ -310,12 +326,13 @@ class RainMeterInterface:
                 self.rainmeter_values['FreeSpace'] = {"Text": "Free space: ???"}
                 self.rainmeter_values['PageNumber'] = {'Text': "1/1"}
             else:
-                torrents = self.torrents[self.page_start:self.page_start + 4]
+                torrents = self.torrents
                 tprogress = {'progress': []}
                 for torrent in torrents:
                     tprogress['progress'].append(torrent['progress'] * 100.0)
                 self.torrent_progress = json.dumps(tprogress)
                 self.rainmeter_values = torrent_format(torrents)
+                self.logging.debug(f"First torrent: {self.rainmeter_values['TorrentName0']['Text']}")
                 self.rainmeter_values['Title'] = {'Text': f"BlockBust Viewer {self.version}"}
                 self.rainmeter_values['ConnectionMeter'] = {'Text': f"Connected to {self.qb_data['url']} "
                                                                     f"qBittorrent {self.qb_data['version']}"}
@@ -342,7 +359,7 @@ class RainMeterInterface:
             for meter in self.rainmeter_values.keys():
                 for key, value in self.rainmeter_values[meter].items():
                     self.bang_string += f"[!SetOption {meter} {key} \"{value}\"]"
-                torrents = self.torrents[self.page_start:self.page_start + 4]
+                torrents = self.torrents
                 for i in range(len(torrents)):
                     if 'better_rss' in torrents[i]['tags']:
                         self.bang_string += f"[!ShowMeter RSSIcon{i}]"
@@ -380,6 +397,7 @@ class RainMeterInterface:
                     self.torrent_reverse = True
                     self.set_settings(sort_by='upspeed', reverse=True)
                 self.page_start = 0
+                self.page_num = 1
             if 'filter_' in bang:
                 if bang == 'filter_all':
                     self.torrent_filter = lambda d: True
@@ -388,6 +406,7 @@ class RainMeterInterface:
                     self.torrent_filter = lambda d: d['state'] != "stalledUP" and d['state'] != "missingFiles"
                     self.set_settings(filter_by='filter_active')
                 self.page_start = 0
+                self.page_num = 1
 
             if 'inhibit_' in bang:
                 self.inhibitor_plugin.get_state_change().clear()
@@ -445,3 +464,17 @@ class RainMeterInterface:
         self.refresh_task.cancel()
         self.inhibitor_plug_task.cancel()
         self.auto_update_task.cancel()
+
+
+if __name__ == "__main__":
+    async def init():
+        rm = RainMeterInterface(None, event_loop, logging, debug=True)
+
+    logging = combined_log.CombinedLogger(
+        name="Rainmeter", level=logging.INFO,
+        formatter=
+        r"%(asctime)s - %(levelname)s - Thread: %(threadName)s - %(name)s - %(funcName)s - %(message)s"
+    )
+    event_loop = asyncio.new_event_loop()
+    event_loop.run_until_complete(init())
+
